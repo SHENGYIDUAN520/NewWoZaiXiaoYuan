@@ -89,23 +89,40 @@ def GetMySignLogs(headers, school_area):
         return False, False, False
 
     data = response_data['data'][0]
-    if int(data['signStatus']) != 1:
-        print("用户已打过卡！")
+    print(f"[调试日志] GetMySignLogs - 原始data对象: {data}") # 打印原始data对象
+    print(f"[调试日志] GetMySignLogs - data对象的键: {list(data.keys())}") # 打印data对象的所有键
+
+    if int(data.get('signStatus', -1)) != 1: # 使用 .get() 避免KeyError
+        print("用户已打过卡或signStatus无效！")
         return False, False, False
-    if 'areaList' not in data:
-        print("获取打卡区域列表失败，数据中未包含 'areaList'。")
+    
+    # 更安全地获取每个值
+    signId = data.get('signId')
+    userArea = data.get('userArea')
+    log_id = data.get('id') # 避免与内置id冲突，重命名为log_id
+    areaData = data.get('areaList')
+
+    if not all([signId, userArea, log_id, areaData]):
+        print(f"获取打卡日志关键信息不完整。signId: {signId}, userArea: {userArea}, id: {log_id}, areaList是否存在: {'areaList' in data}")
         return False, False, False
-    signId, userArea, id, areaData = data['signId'], data['userArea'], data['id'], data['areaList']
+
+    # signId, userArea, id, areaData = data['signId'], data['userArea'], data['id'], data['areaList']
     for _ in areaData:
-        if userArea == _['name']:
-            dataStr = _['dataStr'] if ('dataStr' in _) else ('[{"longitude": %s, "latitude": %s}]' % (_['longitude'], _['latitude']))
+        if userArea == _.get('name'): # 使用 .get()
+            dataStr = _.get('dataStr') if ('dataStr' in _) else ('[{"longitude": %s, "latitude": %s}]' % (_.get('longitude'), _.get('latitude')))
+            # 确保 longitude 和 latitude 存在
+            if _.get('longitude') is None or _.get('latitude') is None and not _.get('dataStr'):
+                print(f"[调试日志] areaData中的项目缺少经纬度或dataStr: {_}")
+                continue # 跳过这个有问题的打卡区域
+
             dataJson = {
                 "type": 1,
                 "polygon": dataStr,
-                "id": _['id'],
-                "name": _['name'],
+                "id": _.get('id'), # 使用 .get()
+                "name": _.get('name'),
             }
-            return signId, id, dataJson
+            return signId, log_id, dataJson # 返回 log_id
+    print(f"[调试日志] 未能在areaData中找到匹配的userArea: {userArea}")
     return False, False, False
 
 
@@ -139,11 +156,11 @@ def GetPunchData(username, location, tencentKey, dataJson):
             return PunchData
 
 
-def Punch(headers, punchData, username, id, signId):
+def Punch(headers, punchData, username, log_id, signId): # 参数从 id 改为 log_id
     headers['Referer'] = 'https://servicewechat.com/wxce6d08f781975d91/200/page-frame.html'
     url = 'https://gw.wozaixiaoyuan.com/sign/mobile/receive/doSignByArea'
     params = {
-        'id': id,
+        'id': log_id, # 使用 log_id
         'schoolId': school_id,
         'signId': signId
     }
@@ -238,11 +255,11 @@ def main():
             'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7'
         }
         if os.environ['dorm_sign'] == 'yes':
-            signId, id, dataJson = GetMySignLogs(headers, school_area)
+            signId, log_id, dataJson = GetMySignLogs(headers, school_area) # id 改为 log_id
             if not signId:
                 return False
             punchData = GetPunchData(username, os.environ['punch_location'], os.environ['tencentKey'], dataJson)
-            Punch(headers, punchData, username, id, signId)
+            Punch(headers, punchData, username, log_id, signId) # id 改为 log_id
             return True
         if os.environ['blue_sign'] == 'yes':
             doBluePunch(headers, username)
