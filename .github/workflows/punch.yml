@@ -33,6 +33,7 @@ jobs:
         dorm_sign: ${{secrets.dorm_sign}}
         blue_sign: ${{secrets.blue_sign}}
         tencentKey: ${{secrets.tencentKey}}
+        WZXY_SCHOOL_AREA: ${{secrets.WZXY_SCHOOL_AREA}}
       run: python actionVersion.py
 
   # User02:
