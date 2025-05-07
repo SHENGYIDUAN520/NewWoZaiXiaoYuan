@@ -67,15 +67,33 @@ def Login(headers, username, password):
 
 
 # 获取我的日志
-def GetMySignLogs(headers):
+def GetMySignLogs(headers, school_area):
     url = 'https://gw.wozaixiaoyuan.com/sign/mobile/receive/getMySignLogs'
     params = {
         'page': 1,
-        'size': 10
+        'size': 10,
+        'schoolArea': school_area
     }
-    data = requests.get(url, headers= headers, params=params).json()['data'][0]
+    response = requests.get(url, headers=headers, params=params)
+    if response.status_code != 200:
+        print(f"获取打卡日志API请求失败，状态码: {response.status_code}, 响应: {response.text}")
+        return False, False, False
+    
+    response_data = response.json()
+    if response_data.get('code') != 0 or not response_data.get('data'):
+        print(f"获取打卡日志API返回错误或无数据: {response_data}")
+        return False, False, False
+
+    if not response_data['data']:
+        print("获取打卡日志API返回数据为空列表，可能当前无打卡任务或校区错误。")
+        return False, False, False
+
+    data = response_data['data'][0]
     if int(data['signStatus']) != 1:
         print("用户已打过卡！")
+        return False, False, False
+    if 'areaList' not in data:
+        print("获取打卡区域列表失败，数据中未包含 'areaList'。")
         return False, False, False
     signId, userArea, id, areaData = data['signId'], data['userArea'], data['id'], data['areaList']
     for _ in areaData:
@@ -190,6 +208,12 @@ def doBluePunch(headers, username):
 def main():
     global school_id
     username = os.environ['wzxy_username']
+    school_area = os.environ.get('WZXY_SCHOOL_AREA')
+    if not school_area:
+        print("错误：环境变量 WZXY_SCHOOL_AREA 未设置！请在 GitHub Secrets 中配置。")
+        MsgSend("打卡配置错误", f"{username} 的 WZXY_SCHOOL_AREA 环境变量未设置！")
+        return False
+
     school_id = get_school_id(os.environ['school_name'])
     login_headers = {'User-Agent': 'Mozilla/5.0 (Linux; Android 10; WLZ-AN00 Build/HUAWEIWLZ-AN00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/86.0.4240.99 XWEB/4343 MMWEBSDK/20220903 Mobile Safari/537.36 MMWEBID/4162 MicroMessenger/8.0.28.2240(0x28001C35) WeChat/arm64 Weixin NetType/WIFI Language/zh_CN ABI/arm64 miniProgram/wxce6d08f781975d91'}
     jws = Login(login_headers, username,
@@ -214,7 +238,7 @@ def main():
             'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7'
         }
         if os.environ['dorm_sign'] == 'yes':
-            signId, id, dataJson = GetMySignLogs(headers)
+            signId, id, dataJson = GetMySignLogs(headers, school_area)
             if not signId:
                 return False
             punchData = GetPunchData(username, os.environ['punch_location'], os.environ['tencentKey'], dataJson)

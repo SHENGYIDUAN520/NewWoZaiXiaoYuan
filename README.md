@@ -27,6 +27,8 @@
 - [x] 2024.8.20 重构代码，使用SQLite数据库对用户JWSESSION以及打卡数据进行存储，使用腾讯地图API对用户打卡地址进行解析处理，新增消息模块里的蓝牙签到（By Mudea661），同步更新README文件。
 - [x] 2024.9.15 我在校园更新新打卡方式，已同步更新服务器代码与Github Action代码。
 - [x] 2025.4.1 我在校园数据包小修改，新增校区区分，仅修改了服务器代码，测试于昆明理工大学
+- [x] 2025.4.X (当前日期) 修复 `actionVersion.py` 中 `GetMySignLogs` 函数因缺少 `areaList` 键导致的 `KeyError`。
+- [x] 2025.4.X (当前日期) 为 `actionVersion.py` 添加校区参数 `WZXY_SCHOOL_AREA` 以应对API更新，修复 `areaList` 可能获取不到的问题。
 
 
 ### 使用说明：
@@ -164,6 +166,7 @@ Python3.7版本及以上
   - `mail_password` 填写**发送邮件通知**的邮件号的授权码
   - `mail_host` 填写**发送邮件通知**的邮件号所对应的SMTP服务器地址
   - `punch_location` 填写想要打卡地址，对应上方服务器端的location打卡地址
+  - `WZXY_SCHOOL_AREA` 填写我在校园中的打卡校区名称，例如：`呈贡校区怡园` (请确保与我在校园APP中显示的完全一致)
   - `dorm_sign` 是否进行归寝打卡，填写yes/no
   - `blue_sign` 是否进行蓝牙打卡，填写yes/no
   - `wzxy_username` 填写我在校园登录账号，通常为手机号
