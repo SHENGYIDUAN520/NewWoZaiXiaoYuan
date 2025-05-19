@@ -67,7 +67,7 @@ def Login(headers, username, password):
 
 
 # 获取我的日志
-def GetMySignLogs(headers, school_area):
+def GetMySignLogs(headers, school_area, username):
     url = 'https://gw.wozaixiaoyuan.com/sign/mobile/receive/getMySignLogs'
     params = {
         'page': 1,
@@ -92,10 +92,28 @@ def GetMySignLogs(headers, school_area):
     print(f"[调试日志] GetMySignLogs - 原始data对象: {data}") # 打印原始data对象
     print(f"[调试日志] GetMySignLogs - data对象的键: {list(data.keys())}") # 打印data对象的所有键
 
-    if int(data.get('signStatus', -1)) != 1: # 使用 .get() 避免KeyError
-        print("用户已打过卡或signStatus无效！")
+    sign_status = data.get('signStatus', -1)
+    sign_title = data.get('signTitle', '')
+
+    # 情况一：任务已完成 (signStatus == 0)，且标题含"请假"，说明是请假类型已处理完毕
+    if int(sign_status) == 0 and "请假" in sign_title:
+        print(f"任务 '{sign_title}' 已完成，确认为请假状态。将跳过后续打卡尝试。")
+        MsgSend(f"账号 {username} 请假状态确认", f"任务 '{sign_title}' 已标记完成。")
+        return False, False, False
+
+    # 情况二：任务不是"待签到"状态 (signStatus != 1)，排除上面已处理的请假完成情况
+    if int(sign_status) != 1:
+        print(f"用户已打过卡或任务非待签到状态 (signStatus: {sign_status})！将跳过后续打卡尝试。")
+        return False, False, False
+
+    # 情况三：任务是"待签到"状态 (signStatus == 1)，但标题含"请假"
+    # 这可能意味着这是一个与请假相关的待处理任务，不应执行常规的定位打卡
+    if "请假" in sign_title:
+        print(f"检测到待签到任务标题为 '{sign_title}'，可能与请假有关。为避免错误，将跳过本次定位打卡。")
+        MsgSend(f"账号 {username} 可能处于请假流程中", f"待处理任务: '{sign_title}'，已跳过定位打卡。")
         return False, False, False
     
+    # 原来的 signStatus != 1 的检查逻辑已在上面覆盖。接下来是正常待签到任务的处理。
     # 更安全地获取每个值
     signId = data.get('signId')
     userArea = data.get('userArea')
@@ -255,7 +273,7 @@ def main():
             'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7'
         }
         if os.environ['dorm_sign'] == 'yes':
-            signId, log_id, dataJson = GetMySignLogs(headers, school_area) # id 改为 log_id
+            signId, log_id, dataJson = GetMySignLogs(headers, school_area, username) # id 改为 log_id
             if not signId:
                 return False
             punchData = GetPunchData(username, os.environ['punch_location'], os.environ['tencentKey'], dataJson)
