@@ -94,22 +94,13 @@ def GetMySignLogs(headers, school_area, username):
     sign_status = data.get('signStatus', -1)
     sign_title = data.get('signTitle', '')
 
-    # 情况一：任务已完成 (signStatus == 0)，且标题含"请假"，说明是请假类型已处理完毕
-    if int(sign_status) == 0 and "请假" in sign_title:
-        print(f"任务 '{sign_title}' 已完成，确认为请假状态。将跳过后续打卡尝试。")
-        MsgSend(f"账号 {username} 请假状态确认", f"任务 '{sign_title}' 已标记完成。")
-        return False, False, False
-
-    # 情况二：任务不是"待签到"状态 (signStatus != 1)，排除上面已处理的请假完成情况
+    # 检查任务状态，只有待签到状态才需要打卡
     if int(sign_status) != 1:
-        print(f"用户已打过卡或任务非待签到状态 (signStatus: {sign_status})！将跳过后续打卡尝试。")
+        print(f"用户已打过卡或任务非待签到状态 (signStatus: {sign_status})！")
         return False, False, False
 
-    # 情况三：任务是"待签到"状态 (signStatus == 1)，但标题含"请假"
-    if "请假" in sign_title:
-        print(f"检测到待签到任务标题为 '{sign_title}'，可能与请假有关。为避免错误，将跳过本次定位打卡。")
-        MsgSend(f"账号 {username} 可能处于请假流程中", f"待处理任务: '{sign_title}'，已跳过定位打卡。")
-        return False, False, False
+    # 显示当前任务信息（包括请假相关任务）
+    print(f"检测到待签到任务: '{sign_title}'，准备执行打卡")
     
     # 获取基本信息
     signId = data.get('signId')

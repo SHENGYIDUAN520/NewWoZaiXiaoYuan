@@ -29,6 +29,7 @@
 - [x] 2025.4.1 我在校园数据包小修改，新增校区区分，仅修改了服务器代码，测试于昆明理工大学
 - [x] 2025.4.X (当前日期) 修复 `actionVersion.py` 中 `GetMySignLogs` 函数因缺少 `areaList` 键导致的 `KeyError`。
 - [x] 2025.4.X (当前日期) 为 `actionVersion.py` 添加校区参数 `WZXY_SCHOOL_AREA` 以应对API更新，修复 `areaList` 可能获取不到的问题。
+- [x] 2025.1.21 修复请假期间打卡问题：移除 `actionVersion.py` 中对请假任务的跳过逻辑，确保请假期间也能正常执行定位打卡，符合学校规定。
 - [x] YYYY.MM.DD 修复请假无法打卡问题：修改 `actionVersion.py` 中 `GetMySignLogs` 函数，增加对任务标题含“请假”时的判断，若识别为请假相关任务则跳过定位打卡；同时调整函数签名以传递 `username` 用于通知。同步更新 `main` 函数中的调用。
 
 
