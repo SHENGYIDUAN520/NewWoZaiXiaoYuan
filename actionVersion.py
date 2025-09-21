@@ -71,8 +71,7 @@ def GetMySignLogs(headers, school_area, username):
     url = 'https://gw.wozaixiaoyuan.com/sign/mobile/receive/getMySignLogs'
     params = {
         'page': 1,
-        'size': 10,
-        'schoolArea': school_area
+        'size': 10
     }
     response = requests.get(url, headers=headers, params=params)
     if response.status_code != 200:
@@ -85,12 +84,12 @@ def GetMySignLogs(headers, school_area, username):
         return False, False, False
 
     if not response_data['data']:
-        print("获取打卡日志API返回数据为空列表，可能当前无打卡任务或校区错误。")
+        print("获取打卡日志API返回数据为空列表，可能当前无打卡任务。")
         return False, False, False
 
     data = response_data['data'][0]
-    print(f"[调试日志] GetMySignLogs - 原始data对象: {data}") # 打印原始data对象
-    print(f"[调试日志] GetMySignLogs - data对象的键: {list(data.keys())}") # 打印data对象的所有键
+    print(f"[调试日志] GetMySignLogs - 原始data对象: {data}")
+    print(f"[调试日志] GetMySignLogs - data对象的键: {list(data.keys())}")
 
     sign_status = data.get('signStatus', -1)
     sign_title = data.get('signTitle', '')
@@ -107,41 +106,66 @@ def GetMySignLogs(headers, school_area, username):
         return False, False, False
 
     # 情况三：任务是"待签到"状态 (signStatus == 1)，但标题含"请假"
-    # 这可能意味着这是一个与请假相关的待处理任务，不应执行常规的定位打卡
     if "请假" in sign_title:
         print(f"检测到待签到任务标题为 '{sign_title}'，可能与请假有关。为避免错误，将跳过本次定位打卡。")
         MsgSend(f"账号 {username} 可能处于请假流程中", f"待处理任务: '{sign_title}'，已跳过定位打卡。")
         return False, False, False
     
-    # 原来的 signStatus != 1 的检查逻辑已在上面覆盖。接下来是正常待签到任务的处理。
-    # 更安全地获取每个值
+    # 获取基本信息
     signId = data.get('signId')
-    userArea = data.get('userArea')
-    log_id = data.get('id') # 避免与内置id冲突，重命名为log_id
-    areaData = data.get('areaList')
-
-    if not all([signId, userArea, log_id, areaData]):
-        print(f"获取打卡日志关键信息不完整。signId: {signId}, userArea: {userArea}, id: {log_id}, areaList是否存在: {'areaList' in data}")
+    log_id = data.get('id')
+    
+    if not all([signId, log_id]):
+        print(f"获取打卡日志关键信息不完整。signId: {signId}, id: {log_id}")
         return False, False, False
 
-    # signId, userArea, id, areaData = data['signId'], data['userArea'], data['id'], data['areaList']
-    for _ in areaData:
-        if userArea == _.get('name'): # 使用 .get()
-            dataStr = _.get('dataStr') if ('dataStr' in _) else ('[{"longitude": %s, "latitude": %s}]' % (_.get('longitude'), _.get('latitude')))
-            # 确保 longitude 和 latitude 存在
-            if _.get('longitude') is None or _.get('latitude') is None and not _.get('dataStr'):
-                print(f"[调试日志] areaData中的项目缺少经纬度或dataStr: {_}")
-                continue # 跳过这个有问题的打卡区域
-
+    # 检查是否有areaList字段
+    areaData = data.get('areaList')
+    if areaData:
+        # 如果有areaList，使用原来的逻辑
+        userArea = data.get('userArea', school_area)
+        for area in areaData:
+            if userArea == area.get('name'):
+                dataStr = area.get('dataStr', '')
+                if not dataStr and area.get('longitude') and area.get('latitude'):
+                    dataStr = f'[{{"longitude": {area.get("longitude")}, "latitude": {area.get("latitude")}}}]'
+                
+                dataJson = {
+                    "type": 1,
+                    "polygon": dataStr,
+                    "id": area.get('id'),
+                    "name": area.get('name'),
+                }
+                return signId, log_id, dataJson
+        print(f"[调试日志] 未能在areaData中找到匹配的区域: {userArea}")
+        return False, False, False
+    else:
+        # 如果没有areaList，尝试从data中直接获取区域信息
+        print(f"[调试日志] 未找到areaList字段，尝试从data中获取区域信息")
+        
+        # 尝试获取经纬度信息
+        longitude = data.get('longitude') or data.get('lng')
+        latitude = data.get('latitude') or data.get('lat')
+        
+        if longitude and latitude:
+            dataStr = f'[{{"longitude": {longitude}, "latitude": {latitude}}}]'
             dataJson = {
                 "type": 1,
                 "polygon": dataStr,
-                "id": _.get('id'), # 使用 .get()
-                "name": _.get('name'),
+                "id": data.get('areaId', log_id),
+                "name": school_area,
             }
-            return signId, log_id, dataJson # 返回 log_id
-    print(f"[调试日志] 未能在areaData中找到匹配的userArea: {userArea}")
-    return False, False, False
+            return signId, log_id, dataJson
+        else:
+            # 如果都没有，创建一个默认的区域配置
+            print(f"[调试日志] 未找到经纬度信息，使用默认配置")
+            dataJson = {
+                "type": 1,
+                "polygon": "",
+                "id": log_id,
+                "name": school_area,
+            }
+            return signId, log_id, dataJson
 
 
 def GetPunchData(username, location, tencentKey, dataJson):
@@ -151,9 +175,18 @@ def GetPunchData(username, location, tencentKey, dataJson):
         reverseGeocode = requests.get("https://apis.map.qq.com/ws/geocoder/v1", params={"location": f"{geocode_data['result']['location']['lat']},{geocode_data['result']['location']['lng']}", "key": tencentKey})
         reverseGeocode_data = json.loads(reverseGeocode.text)
         if reverseGeocode_data['status'] == 0:
-            # 将 polygon 从字符串转换为列表
-            dataJson['polygon'] = json.loads(dataJson['polygon'])
             location_data = reverseGeocode_data['result']
+            
+            # 处理 polygon 数据
+            if dataJson.get('polygon') and dataJson['polygon'].strip():
+                try:
+                    dataJson['polygon'] = json.loads(dataJson['polygon'])
+                except json.JSONDecodeError:
+                    print(f"[调试日志] polygon数据解析失败，使用默认值")
+                    dataJson['polygon'] = []
+            else:
+                dataJson['polygon'] = []
+            
             PunchData = {
                 "latitude": location_data['location']['lat'],
                 "longitude": location_data['location']['lng'],
@@ -167,30 +200,54 @@ def GetPunchData(username, location, tencentKey, dataJson):
                 "towncode": location_data['address_reference']['town']['id'],
                 "township": location_data['address_reference']['town']['title'],
                 "streetcode": "",
-                "street": location_data['address_component']['street'],
-                "inArea": 1,
-                "areaJSON": json.dumps(dataJson, ensure_ascii=False)
+                "street": location_data['address_component']['street']
             }
+            
+            # 只有在有有效polygon数据时才添加区域相关字段
+            if dataJson.get('polygon'):
+                PunchData["inArea"] = 1
+                PunchData["areaJSON"] = json.dumps(dataJson, ensure_ascii=False)
+            
             return PunchData
+    
+    print(f"腾讯地图API调用失败，geocode状态: {geocode_data.get('status', 'unknown')}")
+    return None
 
 
-def Punch(headers, punchData, username, log_id, signId): # 参数从 id 改为 log_id
+def Punch(headers, punchData, username, log_id, signId):
+    if not punchData:
+        print(f"{username}打卡数据获取失败，无法进行打卡")
+        MsgSend("打卡失败！", f"{username}打卡数据获取失败")
+        return False
+        
     headers['Referer'] = 'https://servicewechat.com/wxce6d08f781975d91/200/page-frame.html'
     url = 'https://gw.wozaixiaoyuan.com/sign/mobile/receive/doSignByArea'
     params = {
-        'id': log_id, # 使用 log_id
+        'id': log_id,
         'schoolId': school_id,
         'signId': signId
     }
-    res = requests.post(url, data=json.dumps(punchData), headers=headers, params=params)
-    txt = json.loads(res.text)
-    if txt['code'] == 0:
-        print(f"{username}打卡成功！\n")
-        MsgSend("打卡成功！", f"{username}归寝打卡成功！")
-        return True
-    else:
-        print(f"{username}打卡失败！{str(txt)}\n")
-        MsgSend("打卡失败！", f"{username}归寝打卡失败！{str(res.text)}")
+    
+    print(f"[调试日志] 打卡请求参数: {params}")
+    print(f"[调试日志] 打卡数据: {json.dumps(punchData, ensure_ascii=False)}")
+    
+    try:
+        res = requests.post(url, data=json.dumps(punchData), headers=headers, params=params)
+        txt = json.loads(res.text)
+        
+        print(f"[调试日志] 打卡响应: {txt}")
+        
+        if txt['code'] == 0:
+            print(f"{username}打卡成功！\n")
+            MsgSend("打卡成功！", f"{username}归寝打卡成功！")
+            return True
+        else:
+            print(f"{username}打卡失败！错误信息: {txt.get('message', '未知错误')}")
+            MsgSend("打卡失败！", f"{username}归寝打卡失败！错误: {txt.get('message', str(txt))}")
+            return False
+    except Exception as e:
+        print(f"{username}打卡请求异常: {str(e)}")
+        MsgSend("打卡失败！", f"{username}打卡请求异常: {str(e)}")
         return False
 
 
