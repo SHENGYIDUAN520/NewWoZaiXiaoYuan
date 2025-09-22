@@ -187,9 +187,13 @@ def GetPunchData(username, location, tencentKey, dataJson):
             else:
                 dataJson['polygon'] = []
             
+            # 如果没有polygon数据，使用当前坐标作为默认区域
+            if not dataJson.get('polygon'):
+                dataJson['polygon'] = [{"longitude": lat, "latitude": lat}]
+            
             PunchData = {
-                "latitude": location_data['location']['lat'],
-                "longitude": location_data['location']['lng'],
+                "latitude": lat,
+                "longitude": lng,
                 "nationcode": "",
                 "country": "中国",
                 "province": location_data['ad_info']['province'],
@@ -200,18 +204,53 @@ def GetPunchData(username, location, tencentKey, dataJson):
                 "towncode": location_data['address_reference']['town']['id'],
                 "township": location_data['address_reference']['town']['title'],
                 "streetcode": "",
-                "street": location_data['address_component']['street']
+                "street": location_data['address_component']['street'],
+                "inArea": 1,
+                "areaJSON": json.dumps(dataJson, ensure_ascii=False)
             }
-            
-            # 只有在有有效polygon数据时才添加区域相关字段
-            if dataJson.get('polygon'):
-                PunchData["inArea"] = 1
-                PunchData["areaJSON"] = json.dumps(dataJson, ensure_ascii=False)
             
             return PunchData
     
     print(f"腾讯地图API调用失败，geocode状态: {geocode_data.get('status', 'unknown')}")
-    return None
+    
+    # 如果腾讯地图API失败，使用默认坐标（昆明理工大学呈贡校区）
+    print(f"[调试日志] 腾讯地图API失败，使用默认坐标")
+    
+    # 昆明理工大学呈贡校区的默认坐标
+    default_lat = 24.848236
+    default_lng = 102.85077
+    
+    # 处理 polygon 数据
+    if dataJson.get('polygon') and dataJson['polygon'].strip():
+        try:
+            if isinstance(dataJson['polygon'], str):
+                dataJson['polygon'] = json.loads(dataJson['polygon'])
+        except json.JSONDecodeError:
+            dataJson['polygon'] = []
+    else:
+        # 如果没有polygon数据，使用默认的区域数据
+        dataJson['polygon'] = [{"longitude": default_lng, "latitude": default_lat}]
+    
+    PunchData = {
+        "latitude": default_lat,
+        "longitude": default_lng,
+        "nationcode": "",
+        "country": "中国",
+        "province": "云南省",
+        "citycode": "",
+        "city": "昆明市",
+        "adcode": "530114",
+        "district": "呈贡区",
+        "towncode": "",
+        "township": "吴家营街道",
+        "streetcode": "",
+        "street": "樱花大道",
+        "inArea": 1,
+        "areaJSON": json.dumps(dataJson, ensure_ascii=False)
+    }
+    
+    print(f"[调试日志] 使用默认打卡数据: {PunchData}")
+    return PunchData
 
 
 def Punch(headers, punchData, username, log_id, signId):
