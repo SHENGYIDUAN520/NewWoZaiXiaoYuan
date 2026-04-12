@@ -299,23 +299,41 @@ def upload_blue_data(blue1, blue2, headers, id, signid, mails, config):
 
 
 def doBluePunch(headers, username, config, mails):
-    # 获取签到日志
+    """宿舍签到里的蓝牙归寝（与小程序「蓝牙归寝打卡」同一套 dormSign 接口）。"""
     sign_logs_url = "https://gw.wozaixiaoyuan.com/dormSign/mobile/receive/getMySignLogs"
-    sign_logs_params = {
-        "page": 1,
-        "size": 10
-    }
+    sign_logs_params = {"page": 1, "size": 20}
     try:
         response = requests.get(sign_logs_url, headers=headers, params=sign_logs_params)
-        data_ids = response.json()
-        location_id = data_ids["data"][0]["locationId"]
-        sign_id = data_ids["data"][0]["signId"]
-        major = data_ids["data"][0]["deviceList"][0]["major"]
-        uuid = data_ids["data"][0]["deviceList"][0]["uuid"]
+        payload = response.json()
+        if payload.get("code") != 0:
+            MsgSend(mails, f"账号- {username} -获取宿舍签到列表失败", f"{payload}", config['receive'], config['sct_ftqq'])
+            return 0
+        rows = payload.get("data") or []
+        if not rows:
+            MsgSend(mails, f"账号- {username} -无蓝牙归寝任务", f"列表为空，请确认已到打卡时段。", config['receive'], config['sct_ftqq'])
+            return 0
+        row = None
+        for r in rows:
+            if r.get("signStatus") is not None and int(r["signStatus"]) == 1:
+                row = r
+                break
+        if row is None:
+            if rows[0].get("signStatus") is not None and int(rows[0]["signStatus"]) != 1:
+                MsgSend(mails, f"账号- {username} -蓝牙归寝无需打卡", f"首条 signStatus={rows[0].get('signStatus')}", config['receive'], config['sct_ftqq'])
+                return 0
+            row = rows[0]
+        devices = row.get("deviceList") or []
+        if not devices:
+            MsgSend(mails, f"账号- {username} -蓝牙任务无设备信息", f"请在宿舍签到页确认信标数据。", config['receive'], config['sct_ftqq'])
+            return 0
+        location_id = row["locationId"]
+        sign_id = row["signId"]
+        major = devices[0]["major"]
+        uuid = devices[0]["uuid"]
         blue1 = [uuid.replace("-", "") + str(major)]
         blue2 = {"UUID1": uuid}
-    except:
-        MsgSend(mails,f"账号- {username} -获取签到列表出错！", f"账号- {username} -获取签到列表出错！", config['receive'], config['sct_ftqq'])
+    except Exception as e:
+        MsgSend(mails, f"账号- {username} -获取签到列表出错", f"{e!s}", config['receive'], config['sct_ftqq'])
         return 0
     return upload_blue_data(blue1, blue2, headers, location_id, sign_id, mails, config)
 

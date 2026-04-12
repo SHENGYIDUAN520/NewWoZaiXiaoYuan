@@ -98,22 +98,40 @@ class Signer:
 
         # 获取签到日志
         sign_logs_url = "https://gw.wozaixiaoyuan.com/dormSign/mobile/receive/getMySignLogs"
-        sign_logs_params = {
-            "page": 1,
-            "size": 10
-        }
+        sign_logs_params = {"page": 1, "size": 20}
         try:
             response = self.session.get(sign_logs_url, headers={**headers, "jwsession": cookie}, params=sign_logs_params)
-            data_ids = response.json()
-            location_id = data_ids["data"][0]["locationId"]
-            sign_id = data_ids["data"][0]["signId"]
-            major = data_ids["data"][0]["deviceList"][0]["major"]
-            uuid = data_ids["data"][0]["deviceList"][0]["uuid"]
+            payload = response.json()
+            if payload.get("code") != 0:
+                Logger.w_log(f"账号- {self.mark} -获取宿舍签到列表失败: {payload}", self.mark)
+                return 1
+            rows = payload.get("data") or []
+            if not rows:
+                Logger.w_log(f"账号- {self.mark} -宿舍签到列表为空", self.mark)
+                return 1
+            row = None
+            for r in rows:
+                if r.get("signStatus") is not None and int(r["signStatus"]) == 1:
+                    row = r
+                    break
+            if row is None:
+                if rows[0].get("signStatus") is not None and int(rows[0]["signStatus"]) != 1:
+                    Logger.w_log(f"账号- {self.mark} -无待签到蓝牙归寝任务 signStatus={rows[0].get('signStatus')}", self.mark)
+                    return 1
+                row = rows[0]
+            devices = row.get("deviceList") or []
+            if not devices:
+                Logger.w_log(f"账号- {self.mark} -任务无蓝牙设备信息", self.mark)
+                return 1
+            location_id = row["locationId"]
+            sign_id = row["signId"]
+            major = devices[0]["major"]
+            uuid = devices[0]["uuid"]
             blue1 = [uuid.replace("-", "") + str(major)]
             blue2 = {"UUID1": uuid}
-        except:
-            Logger.w_log(f"账号- {self.mark} -获取签到列表出错！", self.mark)
-            return 0
+        except Exception as e:
+            Logger.w_log(f"账号- {self.mark} -获取签到列表出错: {e}", self.mark)
+            return 1
 
         return BlueDataUploader.upload_blue_data(blue1, blue2, cookie, self.mark, location_id, sign_id)
 

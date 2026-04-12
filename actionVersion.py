@@ -313,23 +313,56 @@ def upload_blue_data(blue1, blue2, headers, id, signid):
 
 
 def doBluePunch(headers, username):
-    # 获取签到日志
+    """宿舍签到 → 蓝牙归寝打卡（dormSign API），与小程序「蓝牙归寝打卡」一致。"""
     sign_logs_url = "https://gw.wozaixiaoyuan.com/dormSign/mobile/receive/getMySignLogs"
-    sign_logs_params = {
-        "page": 1,
-        "size": 10
-    }
+    sign_logs_params = {"page": 1, "size": 20}
     try:
         response = requests.get(sign_logs_url, headers=headers, params=sign_logs_params)
-        data_ids = response.json()
-        location_id = data_ids["data"][0]["locationId"]
-        sign_id = data_ids["data"][0]["signId"]
-        major = data_ids["data"][0]["deviceList"][0]["major"]
-        uuid = data_ids["data"][0]["deviceList"][0]["uuid"]
+        payload = response.json()
+        if payload.get("code") != 0:
+            MsgSend(
+                f"账号- {username} -获取宿舍签到列表失败",
+                f"账号- {username} -接口返回: {payload}",
+            )
+            return 0
+        rows = payload.get("data") or []
+        if not rows:
+            MsgSend(
+                f"账号- {username} -无蓝牙归寝任务",
+                f"账号- {username} -宿舍签到列表为空，请确认是否已到打卡时段。",
+            )
+            return 0
+        row = None
+        for r in rows:
+            if r.get("signStatus") is not None and int(r["signStatus"]) == 1:
+                row = r
+                break
+        if row is None:
+            if rows[0].get("signStatus") is not None and int(rows[0]["signStatus"]) != 1:
+                MsgSend(
+                    f"账号- {username} -蓝牙归寝无需打卡",
+                    f"账号- {username} -当前没有待签到状态的任务（可能已签或已结束）。列表首条 signStatus={rows[0].get('signStatus')}",
+                )
+                return 0
+            row = rows[0]
+        devices = row.get("deviceList") or []
+        if not devices:
+            MsgSend(
+                f"账号- {username} -蓝牙任务无设备信息",
+                f"账号- {username} -请在宿舍签到页确认学校已下发蓝牙信标数据。",
+            )
+            return 0
+        location_id = row["locationId"]
+        sign_id = row["signId"]
+        major = devices[0]["major"]
+        uuid = devices[0]["uuid"]
         blue1 = [uuid.replace("-", "") + str(major)]
         blue2 = {"UUID1": uuid}
-    except:
-        MsgSend(f"账号- {username} -获取签到列表出错！", f"账号- {username} -获取签到列表出错！")
+    except Exception as e:
+        MsgSend(
+            f"账号- {username} -获取签到列表出错",
+            f"账号- {username} -{e!s}",
+        )
         return 0
     return upload_blue_data(blue1, blue2, headers, location_id, sign_id)
 
@@ -368,14 +401,15 @@ def main():
             'Accept-Encoding': 'gzip, deflate',
             'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7'
         }
-        if os.environ['dorm_sign'] == 'yes':
-            signId, log_id, dataJson = GetMySignLogs(headers, school_area, username) # id 改为 log_id
-            if not signId:
-                return False
-            punchData = GetPunchData(username, os.environ['punch_location'], os.environ['tencentKey'], dataJson)
-            Punch(headers, punchData, username, log_id, signId) # id 改为 log_id
-            return True
-        if os.environ['blue_sign'] == 'yes':
+        # 定位归寝（sign/.../doSignByArea）与蓝牙归寝（dormSign/.../doSignByDevice）相互独立，勿在 dorm 分支提前 return，否则 blue_sign 永不执行。
+        if os.environ.get('dorm_sign') == 'yes':
+            signId, log_id, dataJson = GetMySignLogs(headers, school_area, username)
+            if signId:
+                punchData = GetPunchData(
+                    username, os.environ['punch_location'], os.environ['tencentKey'], dataJson
+                )
+                Punch(headers, punchData, username, log_id, signId)
+        if os.environ.get('blue_sign') == 'yes':
             doBluePunch(headers, username)
 
     else:
