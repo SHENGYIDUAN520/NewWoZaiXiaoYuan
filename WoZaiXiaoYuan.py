@@ -277,6 +277,21 @@ def GetConfigs():
     return configs
 
 
+def _dorm_bluetooth_sign_status_zh(val):
+    if val is None:
+        return "无该字段"
+    try:
+        n = int(val)
+    except (TypeError, ValueError):
+        return str(val)
+    known = {
+        0: "已签到或任务已完成",
+        1: "待签到（脚本会尝试蓝牙打卡）",
+        2: "已结束：多为时段已过仍未签，一般无法补签；请次日在打卡窗口内提前运行",
+    }
+    return f"{n} — {known.get(n, '非常见状态，以小程序为准')}"
+
+
 # 蓝牙签到模块开始 By Mudea661
 def upload_blue_data(blue1, blue2, headers, id, signid, mails, config):
     data = {
@@ -319,7 +334,14 @@ def doBluePunch(headers, username, config, mails):
                 break
         if row is None:
             if rows[0].get("signStatus") is not None and int(rows[0]["signStatus"]) != 1:
-                MsgSend(mails, f"账号- {username} -蓝牙归寝无需打卡", f"首条 signStatus={rows[0].get('signStatus')}", config['receive'], config['sct_ftqq'])
+                st = rows[0].get("signStatus")
+                MsgSend(
+                    mails,
+                    f"账号- {username} -蓝牙归寝未执行打卡",
+                    f"列表首条：{_dorm_bluetooth_sign_status_zh(st)}。仅「待签到」时会提交蓝牙打卡。",
+                    config['receive'],
+                    config['sct_ftqq'],
+                )
                 return 0
             row = rows[0]
         devices = row.get("deviceList") or []

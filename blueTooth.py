@@ -116,7 +116,9 @@ class Signer:
                     break
             if row is None:
                 if rows[0].get("signStatus") is not None and int(rows[0]["signStatus"]) != 1:
-                    Logger.w_log(f"账号- {self.mark} -无待签到蓝牙归寝任务 signStatus={rows[0].get('signStatus')}", self.mark)
+                    st = rows[0].get("signStatus")
+                    hint = {0: "已签/完成", 1: "待签到", 2: "已结束(多超时)"}.get(int(st), str(st)) if st is not None else "?"
+                    Logger.w_log(f"账号- {self.mark} -无待签到蓝牙归寝任务，首条 signStatus={st}（{hint}）", self.mark)
                     return 1
                 row = rows[0]
             devices = row.get("deviceList") or []

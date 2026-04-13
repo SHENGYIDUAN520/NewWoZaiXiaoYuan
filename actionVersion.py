@@ -9,6 +9,22 @@ from base64 import b64encode
 import urllib.parse
 
 
+def _dorm_bluetooth_sign_status_zh(val):
+    """宿舍签到列表里的 signStatus（归纳自常见表现，非官方文档）。"""
+    if val is None:
+        return "无该字段"
+    try:
+        n = int(val)
+    except (TypeError, ValueError):
+        return str(val)
+    known = {
+        0: "已签到或任务已完成",
+        1: "待签到（脚本会尝试蓝牙打卡）",
+        2: "已结束：多为打卡时段已过仍未签，或任务已关闭；一般无法再补签，请在次日窗口内（如 22:00–23:00）提前运行 Action",
+    }
+    return f"{n} — {known.get(n, '非常见状态，请以「我在校园」小程序为准')}"
+
+
 def MsgSend(message_title, message_info):
     if os.environ['mail_address']:
         mail = yagmail.SMTP(os.environ['mail_address'],
@@ -105,11 +121,10 @@ def GetMySignLogs(headers, school_area, username):
         print(f"用户已打过卡或任务非待签到状态 (signStatus: {sign_status})！将跳过后续打卡尝试。")
         return False, False, False
 
-    # 情况三：任务是"待签到"状态 (signStatus == 1)，但标题含"请假"
+    # 情况三：任务是"待签到"状态 (signStatus == 1)，标题含"请假"
+    # 你的学校规则：请假后仍需要在「签到信息」模块进行定位打卡
     if "请假" in sign_title:
-        print(f"检测到待签到任务标题为 '{sign_title}'，可能与请假有关。为避免错误，将跳过本次定位打卡。")
-        MsgSend(f"账号 {username} 可能处于请假流程中", f"待处理任务: '{sign_title}'，已跳过定位打卡。")
-        return False, False, False
+        print(f"检测到待签到任务标题为 '{sign_title}'（含请假）。将按规则继续尝试定位打卡。")
     
     # 获取基本信息
     signId = data.get('signId')
@@ -172,6 +187,8 @@ def GetPunchData(username, location, tencentKey, dataJson):
     geocode = requests.get("https://apis.map.qq.com/ws/geocoder/v1", params={"address": location, "key": tencentKey})
     geocode_data = json.loads(geocode.text)
     if geocode_data['status'] == 0:
+        lat = geocode_data['result']['location']['lat']
+        lng = geocode_data['result']['location']['lng']
         reverseGeocode = requests.get("https://apis.map.qq.com/ws/geocoder/v1", params={"location": f"{geocode_data['result']['location']['lat']},{geocode_data['result']['location']['lng']}", "key": tencentKey})
         reverseGeocode_data = json.loads(reverseGeocode.text)
         if reverseGeocode_data['status'] == 0:
@@ -189,7 +206,7 @@ def GetPunchData(username, location, tencentKey, dataJson):
             
             # 如果没有polygon数据，使用当前坐标作为默认区域
             if not dataJson.get('polygon'):
-                dataJson['polygon'] = [{"longitude": lat, "latitude": lat}]
+                dataJson['polygon'] = [{"longitude": lng, "latitude": lat}]
             
             PunchData = {
                 "latitude": lat,
@@ -339,9 +356,11 @@ def doBluePunch(headers, username):
                 break
         if row is None:
             if rows[0].get("signStatus") is not None and int(rows[0]["signStatus"]) != 1:
+                st = rows[0].get("signStatus")
                 MsgSend(
-                    f"账号- {username} -蓝牙归寝无需打卡",
-                    f"账号- {username} -当前没有待签到状态的任务（可能已签或已结束）。列表首条 signStatus={rows[0].get('signStatus')}",
+                    f"账号- {username} -蓝牙归寝未执行打卡",
+                    f"账号- {username} -列表首条任务状态：{_dorm_bluetooth_sign_status_zh(st)}。"
+                    f"仅当存在「待签到」条目时才会调用蓝牙打卡接口。",
                 )
                 return 0
             row = rows[0]
