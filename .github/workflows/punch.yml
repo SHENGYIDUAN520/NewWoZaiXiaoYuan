@@ -3,7 +3,8 @@ name: 我在校园打卡
 on:
   workflow_dispatch:
   schedule:
-     - cron:  '00 14 * * *' # 默认在每天 UTC 14:00 （北京时间 22:00）执行
+     - cron:  '10 14 * * *' # UTC 14:10 = 北京时间 22:10（主执行）
+     - cron:  '30 14 * * *' # UTC 14:30 = 北京时间 22:30（兜底执行）
 
 jobs:
   User01:
