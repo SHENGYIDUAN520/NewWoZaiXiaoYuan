@@ -3,6 +3,7 @@ import json
 import yagmail
 import re
 import os
+import sys
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 from base64 import b64encode
@@ -25,6 +26,12 @@ def _dorm_bluetooth_sign_status_zh(val):
     return f"{n} — {known.get(n, '非常见状态，请以「我在校园」小程序为准')}"
 
 
+def _log_push_failure(channel: str, exc: BaseException) -> None:
+    """避免在日志里原样输出英文 `Error:`，否则 GitHub Actions 会把整行标成红色 Error 条。"""
+    msg = str(exc).replace("Error:", "失败:")
+    print(f"[{channel}] 推送异常: {msg}")
+
+
 def MsgSend(message_title, message_info):
     if os.environ['mail_address']:
         mail = yagmail.SMTP(os.environ['mail_address'],
@@ -32,12 +39,12 @@ def MsgSend(message_title, message_info):
         try:
             mail.send(os.environ['receive_mail'], message_title, message_info)
         except Exception as e:
-            print("推送出错！", str(e))
+            _log_push_failure("mail", e)
     if os.environ['sct_ftqq']:
         try:
             requests.get(f'https://sctapi.ftqq.com/{os.environ["sct_ftqq"]}.send?{urllib.parse.urlencode({"title":message_title, "desp":message_info})}')
         except Exception as e:
-            print("推送出错！", str(e))
+            _log_push_failure("ftqq", e)
 
 def encrypt(t, e):
     t = str(t)
@@ -434,7 +441,9 @@ def main():
     else:
         MsgSend(f"{username} 登陆失败！", f"{username} 登陆失败！")
         return False
+    return True
 
 
 if __name__ == "__main__":
-    main()
+    ok = main()
+    sys.exit(0 if ok is not False else 1)
