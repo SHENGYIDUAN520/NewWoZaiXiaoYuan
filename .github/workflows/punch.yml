@@ -4,10 +4,9 @@ on:
   workflow_dispatch:
   schedule:
      # cron 使用 UTC。北京时间 = UTC+8（全年不变）。
-     # GitHub 定时任务常有排队延迟（数十分钟到约 1 小时），若按「名义 22:10」设 UTC 14:10，实际可能 23 点才跑，错过 22–23 点窗口。
-     # 故整体提前 1 小时：名义约 21:10/21:30（北京），延迟后更容易落在 22:00–23:00 内。
-     - cron:  '10 13 * * *' # UTC 13:10 → 名义 北京时间 21:10
-     - cron:  '30 13 * * *' # UTC 13:30 → 名义 北京时间 21:30
+     # 触发时间设置在北京时间 22:00–23:00 窗口内（按需可再微调）。
+     - cron:  '10 14 * * *' # UTC 14:10 → 北京时间 22:10
+     - cron:  '30 14 * * *' # UTC 14:30 → 北京时间 22:30
 
 jobs:
   User01:
@@ -40,29 +39,35 @@ jobs:
         WZXY_SCHOOL_AREA: ${{secrets.WZXY_SCHOOL_AREA}}
       run: python actionVersion.py
 
-  # User02:
-  #   runs-on: ubuntu-latest
-  #   environment: CONFIG_02
-  #   steps:
-  #   - uses: actions/checkout@v6
-  #   - name: Set up Python 3.9
-  #     uses: actions/setup-python@v6
-  #     with:
-  #       python-version: 3.9
-  #   - name: 安装依赖
-  #     run: |
-  #       python -m pip install --upgrade pip
-  #       pip install -r requirements.txt
-  #   - name: 执行打卡
-  #     env:
-  #       school_name: ${{secrets.school_name}}
-  #       receive_mail: ${{secrets.receive_mail}}
-  #       mail_address: ${{secrets.mail_address}}
-  #       mail_password: ${{secrets.mail_password}}
-  #       mail_host: ${{secrets.mail_host}}
-  #       punch_location: ${{secrets.punch_location}}
-  #       wzxy_username: ${{secrets.wzxy_username}}
-  #       wzxy_password: ${{secrets.wzxy_password}}
-  #       punch_longitude: ${{secrets.punch_longitude}}
-  #       punch_latitude: ${{secrets.punch_latitude}}
-  #     run: python actionVersion.py
+  User02:
+    runs-on: ubuntu-latest
+    environment: CONFIG_02
+    steps:
+    - uses: actions/checkout@v6
+    - name: Set up Python 3.9
+      uses: actions/setup-python@v6
+      with:
+        python-version: 3.9
+    - name: 安装依赖
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    - name: 执行打卡
+      env:
+        # 跟随 User01：使用同一套（小写）secrets 名称
+        school_name: ${{secrets.school_name}}
+        punch_location: ${{secrets.punch_location}}
+        wzxy_username: ${{secrets.wzxy_username}}
+        wzxy_password: ${{secrets.wzxy_password}}
+        dorm_sign: ${{secrets.dorm_sign}}
+        blue_sign: ${{secrets.blue_sign}}
+        tencentKey: ${{secrets.tencentKey}}
+        WZXY_SCHOOL_AREA: ${{secrets.WZXY_SCHOOL_AREA}}
+
+        # 可选推送：不配置则置空，避免脚本读取环境变量时报 KeyError
+        receive_mail: ""
+        mail_address: ""
+        mail_password: ""
+        mail_host: ""
+        sct_ftqq: ""
+      run: python actionVersion.py
