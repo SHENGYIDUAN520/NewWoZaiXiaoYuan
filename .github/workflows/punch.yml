@@ -2,22 +2,27 @@ name: 我在校园打卡
 
 on:
   workflow_dispatch:
-  schedule:
-     # cron 使用 UTC。北京时间 = UTC+8（全年不变）。
-     # 触发时间设置在北京时间 22:00–23:00 窗口内（按需可再微调）。
-     - cron:  '10 14 * * *' # UTC 14:10 → 北京时间 22:10
-     - cron:  '30 14 * * *' # UTC 14:30 → 北京时间 22:30
+  # 你已经用腾讯云函数触发 workflow_dispatch 的话，建议关闭 schedule，
+  # 避免“云函数 + GitHub schedule”双重触发导致重复打卡。
+  # schedule:
+  #   # cron 使用 UTC。北京时间 = UTC+8（全年不变）。
+  #   - cron: '10 14 * * *' # UTC 14:10 → 北京时间 22:10
+  #   - cron: '30 14 * * *' # UTC 14:30 → 北京时间 22:30
+
+concurrency:
+  group: wzxy-punch
+  cancel-in-progress: true
 
 jobs:
   User01:
     runs-on: ubuntu-latest
     environment: CONFIG_01
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v4
     - name: Set up Python 3.9
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v5
       with:
-        python-version: 3.9
+        python-version: '3.9'
     - name: 安装依赖
       run: |
         python -m pip install --upgrade pip
@@ -43,11 +48,11 @@ jobs:
     runs-on: ubuntu-latest
     environment: CONFIG_02
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v4
     - name: Set up Python 3.9
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v5
       with:
-        python-version: 3.9
+        python-version: '3.9'
     - name: 安装依赖
       run: |
         python -m pip install --upgrade pip
